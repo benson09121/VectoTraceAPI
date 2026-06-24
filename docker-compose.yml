@@ -1,0 +1,25 @@
+services:
+
+  postgressql:
+    container_name: vectotrace_db
+    image: postgres:latest
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/
+    environment:
+      - POSTGRES_USER=vectotrace_user
+      - POSTGRES_PASSWORD=vectotrace_password
+      - POSTGRES_DB=vectotrace_db
+
+  redis:
+    container_name: vectotrace_redis
+    image: redis:latest
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  postgres_data:
+  redis_data:
