@@ -105,15 +105,42 @@ SIMPLE_JWT = {
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
+
+
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
+        # 'ENGINE': 'django.db.backends.postgresql',
+        'ENGINE': "dj_db_conn_pool.backends.postgresql",
         'USER': env("DB_USER"),
         'NAME': env("DB_NAME"),
         'PASSWORD': env("DB_PASS"),
         'HOST': 'localhost',
         'PORT': env("DB_PORT"),
-    }
+        'CONN_MAX_AGE': 0,
+        'POOL_OPTIONS': {
+            'POOL_SIZE': 10,
+            'MAX_OVERFLOW': 5,
+            'RECYCLE': 300,
+            'PRE_PING': True,
+            'POOL_RESET_ON_RETURN': 'rollback',
+            'POOL_TIMEOUT': 3,
+        },
+    },
+}
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": env("REDIS_URL"),
+        "TIMEOUT": 600, # 10 minutes
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            'CONNECTION_POOL_KWARGS': {
+                'max_connections': 100,
+                'retry_on_timeout': True,
+            },
+        },
+    },
 }
 
 AUTH_USER_MODEL = 'users.User'

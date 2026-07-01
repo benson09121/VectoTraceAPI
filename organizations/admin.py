@@ -1,3 +1,6 @@
 from django.contrib import admin
+from .models import *
 
-# Register your models here.
+@admin.register(Organization)
+class UsersAdmin(admin.ModelAdmin):
+    list_display = ("name", "status", "created_at")
