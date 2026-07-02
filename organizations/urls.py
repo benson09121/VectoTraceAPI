@@ -7,5 +7,5 @@ app_name = "organizations"
 urlpatterns = [
     path("organizations/", OrganizationAPIView.as_view(), name='organization_v1'),
     path("organizations/roles", OrganizationRoleAPIView.as_view(), name='organization-role_v1'),
-    # path("organizations/<int:org_id>/")
+    path("organizations/<int:org_id>/members", OrganizationMemberAPIView.as_view(), name='organization-member_v1')
 ]

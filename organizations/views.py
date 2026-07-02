@@ -48,3 +48,13 @@ class OrganizationRoleAPIView(generics.CreateAPIView):
                 serializers.save()
                 return Response(serializers.data, status=status.HTTP_201_CREATED)
               return Response(serializers.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class OrganizationMemberAPIView(generics.ListAPIView):
+     serializer_class = OrganizationMember
+     permission_classes = [IsAuthenticated, IsOrgMember]
+
+     def get(self,request, org_id):
+          queryset = Organization.objects.get(id=org_id)
+          serializers = OrganizationMemberGetSerializer(queryset)
+          return Response(serializers.data, status=status.HTTP_200_OK)
