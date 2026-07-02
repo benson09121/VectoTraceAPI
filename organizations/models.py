@@ -13,8 +13,8 @@ class OrganizationRole(models.Model):
         updated_at = models.DateTimeField(auto_now_add=True,null=True)
 
 class OrganizationMember(models.Model):
-        users = models.ForeignKey(to=User,on_delete=models.CASCADE, unique=False)
-        organizations = models.ForeignKey(to=Organization, on_delete=models.CASCADE)
+        users = models.ForeignKey(to=User,on_delete=models.CASCADE, related_name='user_member' ,unique=False)
+        organizations = models.ForeignKey(to=Organization, related_name='members',on_delete=models.CASCADE)
         role = models.ForeignKey(to=OrganizationRole, on_delete=models.CASCADE)
         created_at = models.DateTimeField(auto_now_add=True,null=True)
         updated_at = models.DateTimeField(auto_now_add=True,null=True)

@@ -92,7 +92,7 @@ class StatusPage(models.Model):
         ('dark', 'Dark'),
         ('auto', 'Auto')
     ]
-    organization_id = models.ForeignKey(to=Organization, related_name='status_organization',on_delete=models.CASCADE)
+    organization = models.ForeignKey(to=Organization, related_name='status_organization',on_delete=models.CASCADE)
     slug = models.TextField()
     title = models.TextField()
     is_public = models.BooleanField()
