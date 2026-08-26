@@ -43,6 +43,7 @@ ENCRYPTION_KEY = env('ENCRYPTION_KEY', default='iVuyhkQhV_Pn2mqCfFnfOAlm4cclD0g8
 DEBUG = env.bool('DEBUG', default=False)
 
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1', '[::1]'])
+CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=['http://localhost:8000', 'http://127.0.0.1:8000', 'https://localhost:8000'])
 
 # Permit monitors and webhooks aimed at private/loopback addresses. Off by
 # default: it is the switch that turns SSRF containment off, and it exists
