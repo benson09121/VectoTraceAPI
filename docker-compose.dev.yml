@@ -1,0 +1,54 @@
+# Development stack: backing services only.
+#
+# Postgres and Redis run in containers; Django, Celery worker, and Celery beat
+# run on your host so you get autoreload, breakpoints, and instant edits.
+#
+#   docker compose -f docker-compose.dev.yml up -d
+#
+#   venv/bin/python manage.py runserver 8000
+#   venv/bin/celery -A config worker --loglevel=info
+#   venv/bin/celery -A config beat --loglevel=info \
+#       --scheduler django_celery_beat.schedulers:DatabaseScheduler
+#
+# The worker and beat are not optional. The API only queues checks — without
+# both processes running, api_logs stays empty and every monitor reads
+# "No checks recorded yet" no matter what interval it has.
+#
+# Ports are published to the host because that is the whole point here: your
+# host-side Django connects to them via localhost.
+
+services:
+
+  postgressql:
+    container_name: vectotrace_db_dev
+    image: postgres:17
+    ports:
+      - "${DB_PORT:-5434}:5432"
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASS}
+      - POSTGRES_DB=${DB_NAME}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    container_name: vectotrace_redis_dev
+    image: redis:latest
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
+    volumes:
+      - redis_data_dev:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  postgres_data_dev:
+  redis_data_dev:
