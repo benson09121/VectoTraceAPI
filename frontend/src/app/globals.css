@@ -1,0 +1,241 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Design system: "Data-Dense Dashboard" — blue data surface with amber
+ * highlights, generated for an operations/observability product.
+ *
+ * Contrast is measured, not assumed. Against the light surface (#F8FAFC):
+ *   foreground 9.90:1 · primary 8.34:1 · destructive 4.62:1 · muted-fg 4.55:1
+ * Against the dark surface (#0B1220):
+ *   foreground 15.19:1 · primary 7.36:1 · accent 11.22:1 · muted-fg 7.30:1
+ *
+ * The amber accent measures 3.04:1 in light mode. That clears the 3:1 bar for
+ * non-text UI (borders, indicators, chart marks) but NOT the 4.5:1 bar for
+ * text — so never set label or body copy in --accent on a light surface.
+ */
+
+:root {
+  --radius: 0.5rem;
+
+  --background: #f8fafc;
+  --foreground: #1e3a8a;
+
+  --card: #ffffff;
+  --card-foreground: #1e3a8a;
+  --popover: #ffffff;
+  --popover-foreground: #1e3a8a;
+
+  /* Indigo: 6.01:1 on the light surface, 6.29:1 for white on it. */
+  --primary: #4f46e5;
+  --primary-foreground: #ffffff;
+  --secondary: #6366f1;
+  --secondary-foreground: #ffffff;
+
+  --muted: #e9eef6;
+  --muted-foreground: #64748b;
+
+  /*
+   * `--accent` belongs to shadcn, and shadcn uses it as a SUBTLE HOVER SURFACE
+   * for menu items, select options, command items and tabs (bg-accent /
+   * focus:bg-accent). It is not a brand highlight. Setting it to a saturated
+   * colour paints a vivid bar across every dropdown row on hover.
+   * The brand amber lives in --highlight below.
+   */
+  --accent: #eef2f7;
+  --accent-foreground: #1e3a8a;
+
+  /* The actual amber highlight. Non-text only in light mode (3.04:1). */
+  --highlight: #d97706;
+  /* A darker amber that DOES clear 4.5:1, for when the highlight must be text. */
+  --highlight-text: #92600a;
+
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+
+  --border: #dbeafe;
+  --input: #cbd5e1;
+  --ring: #4f46e5;
+
+  /* Health states — status pills, uptime bars, row indicators. */
+  --up: #15803d;
+  --down: #dc2626;
+  --degraded: #b45309;
+  --paused: #64748b;
+
+  /* Chart series: validated for lightness band, chroma floor, CVD separation
+     and surface contrast. Do not hand-tweak. */
+  --chart-1: #2563eb;
+  --chart-fail: #dc2626;
+
+  /* Request-timing phases. An ordered lightness ramp of ONE hue, not four
+     categorical colours: these are sequential parts of a single measurement,
+     so a ramp both reads as "parts of a whole" and stays legible under any
+     colour-vision deficiency, because lightness carries the difference. */
+  --phase-dns: #1e3a8a;
+  --phase-connect: #1d4ed8;
+  --phase-tls: #3b82f6;
+  --phase-ttfb: #93c5fd;
+
+  /* Row striping and hover for dense tables. Kept as tokens so both themes
+     stay tunable together. */
+  --row-hover: #eef2ff;
+  --row-selected: #e0e7ff;
+
+  /*
+   * Branded chrome. Identical in light and dark — the brand should not change
+   * when a user flips theme. Measured against the sidebar surface:
+   *   nav label 11.93:1 · active label 17.80:1 · muted 7.44:1
+   *   active pill #5b56ea 3.36:1 (clears the 3:1 UI bar), white on it 5.30:1
+   */
+  --sidebar: #12123d;
+  --sidebar-foreground: #c7d2fe;
+  --sidebar-muted: #9aa6d4;
+  --sidebar-active: #5b56ea;
+  --sidebar-active-foreground: #ffffff;
+  --sidebar-border: #24245c;
+}
+
+.dark {
+  --background: #0b1220;
+  --foreground: #e2e8f0;
+
+  --card: #111a2e;
+  --card-foreground: #e2e8f0;
+  --popover: #111a2e;
+  --popover-foreground: #e2e8f0;
+
+  --primary: #818cf8;
+  --primary-foreground: #0b1220;
+  --secondary: #4f46e5;
+  --secondary-foreground: #e2e8f0;
+
+  --muted: #1b2540;
+  --muted-foreground: #94a3b8;
+
+  /* Same contract as light: a subtle hover surface, not the brand amber. */
+  --accent: #1b2540;
+  --accent-foreground: #e2e8f0;
+
+  --highlight: #fbbf24;
+  --highlight-text: #fbbf24;
+
+  --destructive: #f87171;
+  --destructive-foreground: #0b1220;
+
+  --border: #1e293b;
+  --input: #334155;
+  --ring: #818cf8;
+
+  --up: #4ade80;
+  --down: #f87171;
+  --degraded: #fbbf24;
+  --paused: #94a3b8;
+
+  /* Re-stepped from the same ramps rather than flipped: the dark lightness
+     band (0.48–0.67) differs from light's (0.43–0.77). */
+  --chart-1: #3b82f6;
+  --chart-fail: #ef4444;
+
+  --phase-dns: #1e40af;
+  --phase-connect: #2563eb;
+  --phase-tls: #60a5fa;
+  --phase-ttfb: #bfdbfe;
+
+  --row-hover: #191c3d;
+  --row-selected: #22224f;
+
+  /* Brand chrome is intentionally identical to light mode. */
+  --sidebar: #12123d;
+  --sidebar-foreground: #c7d2fe;
+  --sidebar-muted: #9aa6d4;
+  --sidebar-active: #5b56ea;
+  --sidebar-active-foreground: #ffffff;
+  --sidebar-border: #24245c;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-highlight: var(--highlight);
+  --color-highlight-text: var(--highlight-text);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-fail: var(--chart-fail);
+  --color-phase-dns: var(--phase-dns);
+  --color-phase-connect: var(--phase-connect);
+  --color-phase-tls: var(--phase-tls);
+  --color-phase-ttfb: var(--phase-ttfb);
+  --color-up: var(--up);
+  --color-down: var(--down);
+  --color-degraded: var(--degraded);
+  --color-paused: var(--paused);
+  --color-row-hover: var(--row-hover);
+  --color-row-selected: var(--row-selected);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar-active: var(--sidebar-active);
+  --color-sidebar-active-foreground: var(--sidebar-active-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+
+  /* Fira Sans for UI, Fira Code for anything the user must read character by
+     character — URLs, tokens, status codes, response times. */
+  --font-sans: var(--font-fira-sans);
+  --font-mono: var(--font-fira-code);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "cv11", "ss01";
+  }
+
+  /* Numbers in tables and metrics must line up column to column. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer utilities {
+  /*
+   * Respect the OS reduced-motion setting everywhere, once. Individual
+   * components then don't each have to remember to do it.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

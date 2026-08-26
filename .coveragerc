@@ -1,0 +1,27 @@
+[run]
+branch = True
+source =
+    api
+    core
+    organizations
+    surveillance
+    users
+omit =
+    */migrations/*
+    */tests/*
+    */tests.py
+    manage.py
+    config/wsgi.py
+    config/asgi.py
+
+[report]
+# Fail the build if coverage drops below the threshold
+fail_under = 85
+show_missing = True
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    if self.debug:
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:

@@ -11,8 +11,14 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 from pathlib import Path
+import sys
 import environ
 from datetime import timedelta
+from celery.schedules import crontab
+
+# True while `manage.py test` is running. Used to swap Redis for an in-process
+# cache so the suite neither needs Redis nor trips the real throttle limits.
+TESTING = 'test' in sys.argv
 
 env = environ.Env()
 
@@ -28,10 +34,20 @@ environ.Env.read_env(BASE_DIR / ".env")
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = env('SECRET_KEY')
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# Used for symmetric encryption of sensitive fields
+ENCRYPTION_KEY = env('ENCRYPTION_KEY', default='iVuyhkQhV_Pn2mqCfFnfOAlm4cclD0g8vqCIm85YUAA=')
 
-ALLOWED_HOSTS = []
+# SECURITY WARNING: don't run with debug turned on in production!
+# Defaults to False so a deploy that forgets to set it fails closed. Debug
+# tracebacks expose settings, SQL, and environment to anonymous visitors.
+DEBUG = env.bool('DEBUG', default=False)
+
+ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1', '[::1]'])
+
+# Permit monitors and webhooks aimed at private/loopback addresses. Off by
+# default: it is the switch that turns SSRF containment off, and it exists
+# because self-hosters legitimately monitor services on their own LAN.
+MONITOR_ALLOW_INTERNAL_TARGETS = env.bool('MONITOR_ALLOW_INTERNAL_TARGETS', default=False)
 
 
 # Application definition
@@ -43,22 +59,47 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    
+    # Security / OTP
+    'django_otp',
+    'django_otp.plugins.otp_totp',
+
+    # Third Party
     'rest_framework',
+    'rest_framework_simplejwt',
+    'drf_spectacular',
     'django_filters',
+    'corsheaders',
+    # Required for logout: stores blacklisted refresh tokens.
+    'rest_framework_simplejwt.token_blacklist',
+    'django_celery_beat',
+    'django_celery_results',
+    'django_guid',
+    'core.apps.CoreConfig',
     'api.apps.ApiConfig',
     'users',
     'organizations',
-    'surveillance'
+    'surveillance',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
+    # The Next.js dashboard runs on its own origin and calls this API directly.
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django_otp.middleware.OTPMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+
+    # Adds a correlation ID to every request for distributed tracing
+    'django_guid.middleware.guid_middleware',
+    # Multi-tenant: resolves org from URL and attaches to request.organization
+    'organizations.middleware.OrganizationMiddleware',
+    'core.middleware.MaintenanceModeMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -88,12 +129,29 @@ REST_FRAMEWORK = {
     'ALLOWED_VERSIONS': ['v1','v2','v3'],
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-        'rest_framework.authentication.SessionAuthentication'
-    ]
-    # "DEFAULT_PERMISSION_CLASSES": [
-    #     "rest_framework.permissions.DjangoModelPermissionsOrAnonReadOnly"
-    # ]
+        'surveillance.authentication.ApiTokenAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_FILTER_BACKENDS': (
+        'django_filters.rest_framework.DjangoFilterBackend',
+    ),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.ScopedRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'login': '5/min',        # brute-force guard on the password field
+        'register': '10/hour',
+        'subscribe': '10/hour',  # public status page sign-up
+    },
 }
+
+if TESTING:
+    # Tests log in constantly; real limits would throttle the suite itself.
+    # Throttling is still covered — those tests re-enable it via override_settings.
+    REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'] = {
+        'login': None, 'register': None, 'subscribe': None,
+    }
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
@@ -114,7 +172,9 @@ DATABASES = {
         'USER': env("DB_USER"),
         'NAME': env("DB_NAME"),
         'PASSWORD': env("DB_PASS"),
-        'HOST': 'localhost',
+        # 'localhost' when running on the host; the compose services override
+        # this with the postgres service name.
+        'HOST': env("DB_HOST", default='localhost'),
         'PORT': env("DB_PORT"),
         'CONN_MAX_AGE': 0,
         'POOL_OPTIONS': {
@@ -130,7 +190,9 @@ DATABASES = {
 
 CACHES = {
     "default": {
-        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        # django_redis (not Django's built-in RedisCache) — the OPTIONS below
+        # are django_redis-specific and the built-in backend rejects them.
+        "BACKEND": "django_redis.cache.RedisCache",
         "LOCATION": env("REDIS_URL"),
         "TIMEOUT": 600, # 10 minutes
         'OPTIONS': {
@@ -142,6 +204,16 @@ CACHES = {
         },
     },
 }
+
+if TESTING:
+    CACHES = {'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'}}
+
+# Origins allowed to call the API from a browser. The frontend dev server and
+# whatever host the dashboard is deployed to.
+CORS_ALLOWED_ORIGINS = env.list(
+    'CORS_ALLOWED_ORIGINS',
+    default=['http://localhost:3000', 'http://127.0.0.1:3000'],
+)
 
 AUTH_USER_MODEL = 'users.User'
 
@@ -186,4 +258,125 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/django-static/'
+STATIC_ROOT = '/var/www/django-static/' if not DEBUG else BASE_DIR / 'staticfiles'
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+# Default primary key field type
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# ---------------------------------------------------------------------------
+# Logging Configuration
+# ---------------------------------------------------------------------------
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'json': {
+            '()': 'pythonjsonlogger.jsonlogger.JsonFormatter',
+            'format': '%(asctime)s %(levelname)s %(name)s %(correlation_id)s %(message)s'
+        },
+    },
+    'filters': {
+        'correlation_id': {
+            '()': 'django_guid.log_filters.CorrelationId'
+        }
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'json',
+            'filters': ['correlation_id'],
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO' if not DEBUG else 'DEBUG',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'celery': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        }
+    }
+}
+
+DJANGO_GUID = {
+    'GUID_HEADER_NAME': 'Correlation-ID',
+    'VALIDATE_GUID': False,
+    'RETURN_HEADER': True,
+    'EXPOSE_HEADER': True,
+    'INTEGRATE_CELERY': True,
+}
+
+# ---------------------------------------------------------------------------
+# Celery Configuration
+# ---------------------------------------------------------------------------
+CELERY_BROKER_URL = env('REDIS_URL', default='redis://localhost:6380/1')
+CELERY_RESULT_BACKEND = 'django-db'
+CELERY_CACHE_BACKEND = 'django-cache'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+
+CELERY_BEAT_SCHEDULE = {
+    # Must tick faster than MIN_INTERVAL_SECONDS (20s) or a monitor set to the
+    # minimum could never actually fire at that rate. The dispatcher is a single
+    # indexed query, so a 5s tick is cheap.
+    'dispatch-due-checks': {
+        'task': 'surveillance.tasks.schedule_all_monitors',
+        'schedule': 5.0,
+    },
+    'check-ssl-expiry-daily': {
+        'task': 'surveillance.tasks.check_ssl_expiry',
+        'schedule': crontab(hour=6, minute=0),
+    },
+    # Keeps uptime queries off the raw check table.
+    'rollup-hourly-stats': {
+        'task': 'surveillance.tasks.rollup_hourly_stats',
+        'schedule': crontab(minute='*/10'),
+    },
+    'purge-old-checks': {
+        'task': 'surveillance.tasks.purge_old_checks',
+        'schedule': crontab(hour=3, minute=30),
+    },
+    # Notices when the engine itself has stopped.
+    'engine-watchdog': {
+        'task': 'surveillance.tasks.watchdog',
+        'schedule': 300.0,
+    },
+}
+
+# This instance's label, written to every check row. Single-vantage-point by
+# design — VectoTrace is self-hosted, so "where we check from" is wherever you
+# run it. Kept as a column so two instances can share one database.
+INSTANCE_REGION = env('INSTANCE_REGION', default='default')
+
+# Raw check rows older than this are deleted after being rolled up.
+RAW_CHECK_RETENTION_DAYS = env.int('RAW_CHECK_RETENTION_DAYS', default=90)
+
+# How status page subscribers are emailed. This is an Apprise URL supplied by
+# the operator — e.g. mailtos://user:pass@smtp.company.com — so VectoTrace
+# still runs no mail infrastructure of its own. Empty means email subscribers
+# are skipped; webhook subscribers keep working either way.
+SUBSCRIBER_EMAIL_URL = env('SUBSCRIBER_EMAIL_URL', default='')
+
+# Used to build absolute unsubscribe/verify links in notifications, which are
+# sent from a worker with no incoming request to derive the host from.
+PUBLIC_BASE_URL = env('PUBLIC_BASE_URL', default='http://localhost:3000')
+
+# Retry failed tasks, avoid infinite loops
+CELERY_TASK_ACKS_LATE = True
+CELERY_TASK_REJECT_ON_WORKER_LOST = True
+
+# Failure detection constants
+FAILURE_THRESHOLD = 3   # consecutive failures to open incident
+RECOVERY_THRESHOLD = 5  # consecutive successes to auto-resolve
